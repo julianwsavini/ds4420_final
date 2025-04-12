@@ -74,23 +74,34 @@ sarima_pred_data <- data.frame(
 
 
 plot(test_data$Week, test_data$Sales, type = "l", col = "blue", lwd = 2, 
-     xlab = "Week", ylab = "Sales", main = "SARIMA Model Predictions")
+     xlab = "Week",  ylab = "Sales", main = "SARIMA Model Predictions", xaxt="n")
 lines(sarima_pred_data$Week, sarima_pred_data$Sales, col = "red", lwd = 2, lty = 2)
 legend("topleft", legend = c("Actual Sales", "SARIMA Predicted Sales"), 
        col = c("blue", "red"), lty = c(1, 2), bty = "n")
-
+date_ticks <- seq(min(test_data$Week), max(test_data$Week), by = "4 weeks")
+axis(1, at = date_ticks, labels = format(date_ticks, "%b %d"))
 
 sarima_pred <- sarima_pred_data$Sales
 sarima_mae <- mean(abs(y_test - sarima_pred))
 sarima_rmse <- sqrt(mean((y_test - sarima_pred)^2))
+sarima_r2 <- 1 - sum((y_test - sarima_pred)^2) / sum((y_test - mean(y_test))^2)
+
 
 
 cat("SARIMA Model Performance:\n")
 summary(sarima_mod_auto)
 cat(sprintf("Mean Absolute Error (MAE): %.2f\n", sarima_mae))
 cat(sprintf("Root Mean Squared Error (RMSE): %.2f\n", sarima_rmse))
+cat(sprintf("R-squared (R²): %.4f\n", sarima_r2))
 ```
 
+```{r}
+plot(test_data$Sales, sarima_pred_data$Sales, col = "blue", lwd = 2, 
+     xlab = "Actual Weekly Sales", ylab = "Predicted Weekly Sales", main = "Predicted Weekly Sales vs. Actual Weekly Sales")
+abline(a = 0, b = 1, col = "red", lwd = 2, lty = 2)
 
+
+
+```
 
 
