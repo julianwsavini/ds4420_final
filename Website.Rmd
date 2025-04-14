@@ -1,0 +1,133 @@
+---
+title: "Website"
+author: "Ved Rajesh"
+date: "2025-04-14"
+output: html_document
+---
+
+## Website code for extra credit
+
+```{r}
+library(shiny)
+library(plotly)
+library(dplyr)
+library(lubridate)
+library(forecast)
+
+data <- read.csv("train.csv")
+
+ui <- navbarPage("Store Sales Forecasting",
+  tabPanel("Project Description",
+    fluidPage(
+      titlePanel("Project Description"),
+      mainPanel(
+        h2("Store Sales Forecasting Project"),
+        h4("By: Julian Savini, Kamil Pacana and Ved Rajesh"),
+        h4("\n"),
+        shiny::p("In this project, we explore whether simple machine learning models that we learned in an undergraduate machine learning course can be used to accurately predict future retail sales. Our work examines the Rossmann store dataset and implements two ML models, Multi-Layer Perceptron (MLP) and SARIMA. This website however will be focussing on the SARIMA model. \n"),
+        shiny::p("In the following SARIMA Model page, we have an interactive model, metrics such as MAE and RMSE. You are able to see how the SARIMA model predicts the sales for any of the 1000 stores in the Rossmann dataset that we used."),
+      )
+    )
+  ),
+  
+  # SARIMA model
+  tabPanel("SARIMA Model",
+    fluidPage(
+      sidebarLayout(
+        sidebarPanel(
+          selectInput("store", "Select Store:", 
+                      choices = sort(unique(data$Store)), 
+                      selected = sort(unique(data$Store))[1])
+        ),
+        mainPanel(
+          plotlyOutput("forecastPlot", width = "100%", height = "600px"),
+          h4("Performance Metrics"),
+          fluidRow(
+            column(6, strong("MAE:"), textOutput("mae", inline = TRUE)),
+            column(6, strong("RMSE:"), textOutput("rmse", inline = TRUE))
+          ),
+          tags$br(),
+        )
+      )
+    )
+  )
+)
+
+
+server <- function(input, output) {
+  # Filters weekly sales for whatever store is chosen
+  weekly_data <- reactive({
+    req(input$store)
+    data %>%
+      filter(Store == as.numeric(input$store)) %>%
+      arrange(as.Date(Date)) %>%
+      group_by(Week = floor_date(as.Date(Date), "week")) %>%
+      summarize(weekly_sales = sum(Sales), .groups = "drop")
+  })
+  
+  store_predict <- reactive({
+    df <- weekly_data()
+    n <- nrow(df)
+    validate(need(n > 2, "Not enough data to model"))
+    
+    # Training selected store here
+    n_train <- floor(0.8 * n)
+    train_df <- df[1:n_train, ]
+    test_df  <- df[(n_train + 1):n, ]
+    train_ts <- ts(train_df$weekly_sales, frequency = 52)
+    
+    fit <- auto.arima(train_ts, seasonal = TRUE)
+    h <- nrow(test_df)
+    fc <- forecast(fit, h = h)
+    
+    # Metrics
+    pred_vals <- as.numeric(fc$mean)
+    actuals <- test_df$weekly_sales
+    mae_val <- mean(abs(pred_vals - actuals))
+    rmse_val <- sqrt(mean((pred_vals - actuals)^2))
+    
+    list(train = train_df, test = test_df, forecast = fc, model = fit, 
+         MAE = mae_val, RMSE = rmse_val)
+  })
+  
+  # Plot
+  output$forecastPlot <- renderPlotly({
+    res <- store_predict()
+    df_test <- res$test
+    fc <- res$forecast
+    df_test$Week <- as.Date(df_test$Week)
+    
+    plot_ly() %>%
+      # Actual Sales
+      add_lines(x = df_test$Week, y = df_test$weekly_sales, 
+                name = "Actual Sales", 
+                line = list(color = "blue", width = 2)) %>%
+      # Predicted SARIMA
+      add_lines(x = df_test$Week, y = as.numeric(fc$mean), 
+                name = "SARIMA Predicted Sales", 
+                line = list(color = "red", width = 2, dash = "dash")) %>%
+      layout(
+        title = "SARIMA Model Predictions",
+        xaxis = list(
+          title = "Week",
+          type = "date",
+          range = c(min(df_test$Week), max(df_test$Week))
+        ),
+        yaxis = list(title = "Sales"),
+        legend = list(x = 0.05, y = 0.95)
+      )
+  })
+  # MAE output
+  output$mae <- renderText({
+    res <- store_predict()
+    sprintf("%.2f", res$MAE)
+  })
+  # RMSE output
+  output$rmse <- renderText({
+    res <- store_predict()
+    sprintf("%.2f", res$RMSE)
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
